@@ -1,9 +1,8 @@
 use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 
 pub struct Pool<T> {
-    free: RefCell<Vec<T>>,
-    creation: Box<dyn Fn() -> T>,
-    clearance: Box<dyn Fn(&mut T)>,
+    internal: Arc<Mutex<InternalPool<T>>>,
 }
 
 impl<T> Pool<T> {
@@ -13,17 +12,16 @@ impl<T> Pool<T> {
         D: Fn(&mut T) -> () + 'static,
     {
         Pool {
-            free: RefCell::new(Vec::new()),
-            creation: Box::new(creation),
-            clearance: Box::new(clearance),
+            internal: Arc::new(Mutex::new(InternalPool::new(creation, clearance))),
         }
     }
 
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
-        let item = if self.free.borrow().is_empty() {
-            (*self.creation)()
+        let pool = self.internal.lock().unwrap();
+        let item = if pool.free.borrow().is_empty() {
+            (*pool.creation)()
         } else {
-            self.free.borrow_mut().pop().unwrap()
+            pool.free.borrow_mut().pop().unwrap()
         };
         ItemGuard {
             item: Some(item),
@@ -32,8 +30,37 @@ impl<T> Pool<T> {
     }
 
     pub fn reintroduce(&self, mut item: T) {
-        (*self.clearance)(&mut item);
-        self.free.borrow_mut().push(item)
+        let pool = self.internal.lock().unwrap();
+        (*pool.clearance)(&mut item);
+        pool.free.borrow_mut().push(item);
+    }
+}
+
+impl<T> Clone for Pool<T> {
+    fn clone(&self) -> Self {
+        Pool {
+            internal: self.internal.clone(),
+        }
+    }
+}
+
+struct InternalPool<T> {
+    free: RefCell<Vec<T>>,
+    creation: Box<dyn Fn() -> T>,
+    clearance: Box<dyn Fn(&mut T)>,
+}
+
+impl<T> InternalPool<T> {
+    pub fn new<C, D>(creation: C, clearance: D) -> Self
+    where
+        C: Fn() -> T + 'static,
+        D: Fn(&mut T) -> () + 'static,
+    {
+        InternalPool {
+            free: RefCell::new(Vec::new()),
+            creation: Box::new(creation),
+            clearance: Box::new(clearance),
+        }
     }
 }
 
