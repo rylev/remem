@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
 pub struct Pool<T> {
@@ -17,11 +16,11 @@ impl<T> Pool<T> {
     }
 
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
-        let pool = self.internal.lock().unwrap();
-        let item = if pool.free.borrow().is_empty() {
+        let mut pool = self.internal.lock().unwrap();
+        let item = if pool.free.is_empty() {
             (*pool.creation)()
         } else {
-            pool.free.borrow_mut().pop().unwrap()
+            pool.free.pop().unwrap()
         };
         ItemGuard {
             item: Some(item),
@@ -30,9 +29,9 @@ impl<T> Pool<T> {
     }
 
     pub fn reintroduce(&self, mut item: T) {
-        let pool = self.internal.lock().unwrap();
+        let mut pool = self.internal.lock().unwrap();
         (*pool.clearance)(&mut item);
-        pool.free.borrow_mut().push(item);
+        pool.free.push(item);
     }
 }
 
@@ -45,7 +44,7 @@ impl<T> Clone for Pool<T> {
 }
 
 struct InternalPool<T> {
-    free: RefCell<Vec<T>>,
+    free: Vec<T>,
     creation: Box<dyn Fn() -> T>,
     clearance: Box<dyn Fn(&mut T)>,
 }
@@ -57,7 +56,7 @@ impl<T> InternalPool<T> {
         D: Fn(&mut T) -> () + 'static,
     {
         InternalPool {
-            free: RefCell::new(Vec::new()),
+            free: Vec::new(),
             creation: Box::new(creation),
             clearance: Box::new(clearance),
         }
