@@ -1,3 +1,5 @@
+#![feature(test)]
+
 use std::sync::{Arc, Mutex};
 
 pub struct Pool<T> {
@@ -90,6 +92,9 @@ impl<'a, T> std::ops::DerefMut for ItemGuard<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
+    use test::Bencher;
+
     use super::*;
 
     #[test]
@@ -115,5 +120,41 @@ mod tests {
         item.push(1);
         item.push(2);
         item.push(3);
+    }
+
+    const ORIGINAL_SIZE: usize = 10;
+    const ITERATIONS: usize = 1000;
+
+    macro_rules! run_benchmark {
+        ($get_item:expr) => {{
+            let mut item = $get_item;
+
+            for n in 0..ORIGINAL_SIZE {
+                item.push(n);
+            }
+
+            drop(item);
+
+            for n in 0..ITERATIONS {
+                let mut item = $get_item;
+
+                for n in 0..(ITERATIONS - n) {
+                    item.push(n);
+                }
+            }
+        }};
+    }
+
+    #[bench]
+    fn bench_remem(b: &mut Bencher) {
+        b.iter(|| {
+            let pool = Pool::<Vec<usize>>::new(|| Vec::new(), |v| v.clear());
+            run_benchmark!(pool.get());
+        });
+    }
+
+    #[bench]
+    fn bench_vec(b: &mut Bencher) {
+        b.iter(|| run_benchmark!(Vec::new()));
     }
 }
