@@ -110,7 +110,14 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let pool = Pool::<Vec<u8>>::new(1024, || Vec::new(), |v| v.clear());
+        let pool = Pool::<Vec<u8>>::new(
+            1024,
+            || {
+                println!("Allocating new memory");
+                Vec::new()
+            },
+            |v| v.clear(),
+        );
         let mut item = pool.get();
         let mut _item2 = pool.get();
 
@@ -128,23 +135,25 @@ mod tests {
     }
 
     const ORIGINAL_SIZE: usize = 10;
-    const ITERATIONS: usize = 1000;
+    const ITERATIONS: usize = 10;
 
     macro_rules! run_benchmark {
-        ($get_item:expr) => {{
-            let mut item = $get_item;
+        ($create_item:expr) => {{
+            for _ in 0..1000 {
+                let mut item = $create_item();
 
-            for n in 0..ORIGINAL_SIZE {
-                item.push(n);
-            }
-
-            drop(item);
-
-            for n in 0..ITERATIONS {
-                let mut item = $get_item;
-
-                for n in 0..(ITERATIONS - n) {
+                for n in 0..ORIGINAL_SIZE {
                     item.push(n);
+                }
+
+                drop(item);
+
+                for n in 0..ITERATIONS {
+                    let mut item = $create_item();
+
+                    for n in 0..(ITERATIONS - n) {
+                        item.push(n);
+                    }
                 }
             }
         }};
@@ -154,12 +163,12 @@ mod tests {
     fn bench_remem(b: &mut Bencher) {
         let pool = Pool::<Vec<usize>>::new(1024, || Vec::new(), |v| v.clear());
         b.iter(|| {
-            run_benchmark!(pool.get());
+            run_benchmark!(|| pool.get());
         });
     }
 
     #[bench]
     fn bench_vec(b: &mut Bencher) {
-        b.iter(|| run_benchmark!(Vec::new()));
+        b.iter(|| run_benchmark!(|| Vec::new()));
     }
 }
