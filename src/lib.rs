@@ -1,39 +1,77 @@
-use std::cell::RefCell;
+#![feature(test)]
+
+use std::sync::{Arc, Mutex};
 
 pub struct Pool<T> {
-    free: RefCell<Vec<T>>,
-    creation: Box<dyn Fn() -> T>,
-    clearance: Box<dyn Fn(&mut T)>,
+    internal: Arc<Mutex<InternalPool<T>>>,
 }
 
 impl<T> Pool<T> {
-    pub fn new<C, D>(creation: C, clearance: D) -> Pool<T>
+    pub fn new<C, D>(cap: usize, creation: C, clearance: D) -> Pool<T>
     where
         C: Fn() -> T + 'static,
         D: Fn(&mut T) -> () + 'static,
     {
         Pool {
-            free: RefCell::new(Vec::new()),
-            creation: Box::new(creation),
-            clearance: Box::new(clearance),
+            internal: Arc::new(Mutex::new(InternalPool::new(cap, creation, clearance))),
         }
     }
 
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
-        let item = if self.free.borrow().is_empty() {
-            (*self.creation)()
-        } else {
-            self.free.borrow_mut().pop().unwrap()
-        };
+        let mut pool = self.internal.lock().unwrap();
+        // If the pool is empty, we double the capacity and batch allocate
+        // empty elements.
+        if pool.free.is_empty() {
+            let capacity = pool.free.capacity();
+            pool.free.reserve(capacity);
+            for _ in 0..capacity {
+                let item = (*pool.creation)();
+                pool.free.push(item);
+            }
+        }
+
         ItemGuard {
-            item: Some(item),
+            item: Some(pool.free.pop().unwrap()),
             pool: self,
         }
     }
 
     pub fn reintroduce(&self, mut item: T) {
-        (*self.clearance)(&mut item);
-        self.free.borrow_mut().push(item)
+        let mut pool = self.internal.lock().unwrap();
+        (*pool.clearance)(&mut item);
+        pool.free.push(item);
+    }
+}
+
+impl<T> Clone for Pool<T> {
+    fn clone(&self) -> Self {
+        Pool {
+            internal: self.internal.clone(),
+        }
+    }
+}
+
+struct InternalPool<T> {
+    free: Vec<T>,
+    creation: Box<dyn Fn() -> T>,
+    clearance: Box<dyn Fn(&mut T)>,
+}
+
+impl<T> InternalPool<T> {
+    pub fn new<C, D>(cap: usize, creation: C, clearance: D) -> Self
+    where
+        C: Fn() -> T + 'static,
+        D: Fn(&mut T) -> () + 'static,
+    {
+        let mut free = Vec::with_capacity(cap);
+        for _ in 0..cap {
+            free.push(creation());
+        }
+        InternalPool {
+            free,
+            creation: Box::new(creation),
+            clearance: Box::new(clearance),
+        }
     }
 }
 
@@ -64,11 +102,15 @@ impl<'a, T> std::ops::DerefMut for ItemGuard<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
+    use test::Bencher;
+
     use super::*;
 
     #[test]
     fn it_works() {
         let pool = Pool::<Vec<u8>>::new(
+            1024,
             || {
                 println!("Allocating new memory");
                 Vec::new()
@@ -89,5 +131,43 @@ mod tests {
         item.push(1);
         item.push(2);
         item.push(3);
+    }
+
+    const ORIGINAL_SIZE: usize = 10;
+    const ITERATIONS: usize = 10;
+
+    macro_rules! run_benchmark {
+        ($create_item:expr) => {{
+            for _ in 0..1000 {
+                let mut item = $create_item();
+
+                for n in 0..ORIGINAL_SIZE {
+                    item.push(n);
+                }
+
+                drop(item);
+
+                for n in 0..ITERATIONS {
+                    let mut item = $create_item();
+
+                    for n in 0..(ITERATIONS - n) {
+                        item.push(n);
+                    }
+                }
+            }
+        }};
+    }
+
+    #[bench]
+    fn bench_remem(b: &mut Bencher) {
+        let pool = Pool::<Vec<usize>>::new(1024, || Vec::new(), |v| v.clear());
+        b.iter(|| {
+            run_benchmark!(|| pool.get());
+        });
+    }
+
+    #[bench]
+    fn bench_vec(b: &mut Bencher) {
+        b.iter(|| run_benchmark!(|| Vec::new()));
     }
 }
