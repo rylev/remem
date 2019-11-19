@@ -2,14 +2,11 @@
 //!
 //! https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-epoch/examples/treiber_stack.rs
 
-#![allow(unused)]
-
 use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 use crossbeam_epoch::{Atomic, Owned};
-use crossbeam_utils::thread::scope;
 
 /// Treiber's lock-free stack.
 ///
@@ -79,12 +76,6 @@ impl<T> TreiberStack<T> {
                 None => return None,
             }
         }
-    }
-
-    /// Returns `true` if the stack is empty.
-    pub(super) fn is_empty(&self) -> bool {
-        let guard = crossbeam_epoch::pin();
-        self.head.load(Acquire, &guard).is_null()
     }
 }
 
