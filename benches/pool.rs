@@ -26,7 +26,7 @@ mod remem {
     }
 
     fn run(thread: usize, iter: usize) {
-        let p = Pool::<Vec<usize>>::new(|| vec![0; CAPACITY]);
+        let p = Pool::new(|| vec![0usize; CAPACITY]);
         let mut threads = Vec::new();
 
         for _ in 0..thread {
@@ -73,7 +73,7 @@ mod vec {
         for _ in 0..thread {
             threads.push(thread::spawn(move || {
                 for _ in 0..iter {
-                    let mut v: Vec<usize> = vec![0; CAPACITY];
+                    let mut v = vec![0usize; CAPACITY];
                     v[0] = 1;
                     v[CAPACITY / 4] = 1;
                     v[CAPACITY / 2] = 1;

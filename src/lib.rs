@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use treiber_stack::TreiberStack as Stack;
 
@@ -61,7 +62,7 @@ impl<T> Pool<T> {
     }
 
     /// Store an item back inside the pool.
-    fn reintroduce(&self, mut item: T) {
+    fn push(&self, mut item: T) {
         (*self.internal.clear)(&mut item);
         self.internal.stack.push(item);
     }
@@ -83,11 +84,11 @@ pub struct ItemGuard<'a, T> {
 
 impl<'a, T> Drop for ItemGuard<'a, T> {
     fn drop(&mut self) {
-        self.pool.reintroduce(self.item.take().unwrap())
+        self.pool.push(self.item.take().unwrap())
     }
 }
 
-impl<'a, T> std::ops::Deref for ItemGuard<'a, T> {
+impl<'a, T> Deref for ItemGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -95,7 +96,7 @@ impl<'a, T> std::ops::Deref for ItemGuard<'a, T> {
     }
 }
 
-impl<'a, T> std::ops::DerefMut for ItemGuard<'a, T> {
+impl<'a, T> DerefMut for ItemGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.item.as_mut().unwrap()
     }
