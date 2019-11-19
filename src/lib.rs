@@ -7,22 +7,18 @@ mod treiber_stack;
 
 struct Internal<T> {
     free: Stack<T>,
-    create: Box<dyn Fn() -> T>,
-    clear: Box<dyn Fn(&mut T)>,
+    create: Box<dyn Fn() -> T + Send + Sync>,
+    clear: Box<dyn Fn(&mut T) + Send + Sync>,
 }
 
 impl<T> Internal<T> {
-    pub fn new<C, D>(cap: usize, create: C, clear: D) -> Self
+    pub fn new<C, D>(create: C, clear: D) -> Self
     where
-        C: Fn() -> T + 'static,
-        D: Fn(&mut T) -> () + 'static,
+        C: Fn() -> T + Send + Sync + 'static,
+        D: Fn(&mut T) -> () + Send + Sync + 'static,
     {
-        let free = Stack::new();
-        for _ in 0..cap {
-            free.push(create());
-        }
         Internal {
-            free,
+            free: Stack::new(),
             create: Box::new(create),
             clear: Box::new(clear),
         }
@@ -35,19 +31,19 @@ pub struct Pool<T> {
 }
 
 impl<T> Pool<T> {
-    pub fn new<C, D>(cap: usize, create: C, clear: D) -> Pool<T>
+    pub fn new<C, D>(create: C, clear: D) -> Pool<T>
     where
-        C: Fn() -> T + 'static,
-        D: Fn(&mut T) -> () + 'static,
+        C: Fn() -> T + Send + Sync + 'static,
+        D: Fn(&mut T) -> () + Send + Sync + 'static,
     {
         Pool {
-            internal: Arc::new(Internal::new(cap, create, clear)),
+            internal: Arc::new(Internal::new(create, clear)),
         }
     }
 
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
         let pool = &self.internal;
-        let item = if pool.free.is_empty() {
+        let item = if dbg!(pool.free.is_empty()) {
             (*pool.create)()
         } else {
             pool.free.pop().unwrap()
@@ -96,77 +92,5 @@ impl<'a, T> std::ops::Deref for ItemGuard<'a, T> {
 impl<'a, T> std::ops::DerefMut for ItemGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.item.as_mut().unwrap()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    extern crate test;
-    use test::Bencher;
-
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let pool = Pool::<Vec<u8>>::new(
-            1024,
-            || {
-                println!("Allocating new memory");
-                Vec::new()
-            },
-            |v| v.clear(),
-        );
-        let mut item = pool.get();
-        let mut _item2 = pool.get();
-
-        item.push(1);
-        item.push(2);
-        item.push(3);
-
-        drop(item);
-
-        let mut item = pool.get();
-
-        item.push(1);
-        item.push(2);
-        item.push(3);
-    }
-
-    const ORIGINAL_SIZE: usize = 10;
-    const ITERATIONS: usize = 10;
-
-    macro_rules! run_benchmark {
-        ($create_item:expr) => {{
-            for _ in 0..1000 {
-                let mut item = $create_item();
-
-                for n in 0..ORIGINAL_SIZE {
-                    item.push(n);
-                }
-
-                drop(item);
-
-                for n in 0..ITERATIONS {
-                    let mut item = $create_item();
-
-                    for n in 0..(ITERATIONS - n) {
-                        item.push(n);
-                    }
-                }
-            }
-        }};
-    }
-
-    #[bench]
-    fn bench_remem(b: &mut Bencher) {
-        let pool = Pool::<Vec<usize>>::new(1024, || Vec::new(), |v| v.clear());
-        b.iter(|| {
-            run_benchmark!(|| pool.get());
-        });
-    }
-
-    #[bench]
-    fn bench_vec(b: &mut Bencher) {
-        b.iter(|| run_benchmark!(|| Vec::new()));
     }
 }
