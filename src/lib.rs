@@ -1,19 +1,17 @@
 #![feature(test)]
 
-use std::sync::{Arc, Mutex};
-
+use std::sync::Arc;
 use treiber_stack::TreiberStack as Stack;
 
 mod treiber_stack;
 
-struct InternalPool<T> {
+struct Internal<T> {
     free: Stack<T>,
-    capacity: usize,
     create: Box<dyn Fn() -> T>,
     clear: Box<dyn Fn(&mut T)>,
 }
 
-impl<T> InternalPool<T> {
+impl<T> Internal<T> {
     pub fn new<C, D>(cap: usize, create: C, clear: D) -> Self
     where
         C: Fn() -> T + 'static,
@@ -23,18 +21,17 @@ impl<T> InternalPool<T> {
         for _ in 0..cap {
             free.push(create());
         }
-        InternalPool {
+        Internal {
             free,
-            capacity: cap,
             create: Box::new(create),
             clear: Box::new(clear),
         }
     }
 }
 
-
+/// A pool of reusable mememory.
 pub struct Pool<T> {
-    internal: Arc<InternalPool<T>>,
+    internal: Arc<Internal<T>>,
 }
 
 impl<T> Pool<T> {
@@ -44,25 +41,20 @@ impl<T> Pool<T> {
         D: Fn(&mut T) -> () + 'static,
     {
         Pool {
-            internal: Arc::new(InternalPool::new(cap, create, clear)),
+            internal: Arc::new(Internal::new(cap, create, clear)),
         }
     }
 
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
         let pool = &self.internal;
-        // If the pool is empty, we double the capacity and batch allocate
-        // empty elements.
-        dbg!(pool.capacity);
-        if pool.free.is_empty() {
-            for _ in 0..dbg!(pool.capacity) {
-                let item = (*pool.create)();
-                pool.free.push(item);
-            }
-            // pool.capacity *= 2;
-        }
+        let item = if pool.free.is_empty() {
+            (*pool.create)()
+        } else {
+            pool.free.pop().unwrap()
+        };
 
         ItemGuard {
-            item: Some(pool.free.pop().unwrap()),
+            item: Some(item),
             pool: self,
         }
     }
