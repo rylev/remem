@@ -2,61 +2,13 @@
 
 use std::sync::{Arc, Mutex};
 
-use treiber_stack::TreiberStack;
+use treiber_stack::TreiberStack as Stack;
 
 mod treiber_stack;
 
-pub struct Pool<T> {
-    internal: Arc<Mutex<InternalPool<T>>>,
-}
-
-impl<T> Pool<T> {
-    pub fn new<C, D>(cap: usize, create: C, clear: D) -> Pool<T>
-    where
-        C: Fn() -> T + 'static,
-        D: Fn(&mut T) -> () + 'static,
-    {
-        Pool {
-            internal: Arc::new(Mutex::new(InternalPool::new(cap, create, clear))),
-        }
-    }
-
-    pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
-        let mut pool = self.internal.lock().unwrap();
-        // If the pool is empty, we double the capacity and batch allocate
-        // empty elements.
-        if pool.free.is_empty() {
-            let capacity = pool.free.capacity();
-            pool.free.reserve(capacity);
-            for _ in 0..capacity {
-                let item = (*pool.create)();
-                pool.free.push(item);
-            }
-        }
-
-        ItemGuard {
-            item: Some(pool.free.pop().unwrap()),
-            pool: self,
-        }
-    }
-
-    pub fn reintroduce(&self, mut item: T) {
-        let mut pool = self.internal.lock().unwrap();
-        (*pool.clear)(&mut item);
-        pool.free.push(item);
-    }
-}
-
-impl<T> Clone for Pool<T> {
-    fn clone(&self) -> Self {
-        Pool {
-            internal: self.internal.clone(),
-        }
-    }
-}
-
 struct InternalPool<T> {
-    free: Vec<T>,
+    free: Stack<T>,
+    capacity: usize,
     create: Box<dyn Fn() -> T>,
     clear: Box<dyn Fn(&mut T)>,
 }
@@ -67,14 +19,65 @@ impl<T> InternalPool<T> {
         C: Fn() -> T + 'static,
         D: Fn(&mut T) -> () + 'static,
     {
-        let mut free = Vec::with_capacity(cap);
+        let free = Stack::new();
         for _ in 0..cap {
             free.push(create());
         }
         InternalPool {
             free,
+            capacity: cap,
             create: Box::new(create),
             clear: Box::new(clear),
+        }
+    }
+}
+
+
+pub struct Pool<T> {
+    internal: Arc<InternalPool<T>>,
+}
+
+impl<T> Pool<T> {
+    pub fn new<C, D>(cap: usize, create: C, clear: D) -> Pool<T>
+    where
+        C: Fn() -> T + 'static,
+        D: Fn(&mut T) -> () + 'static,
+    {
+        Pool {
+            internal: Arc::new(InternalPool::new(cap, create, clear)),
+        }
+    }
+
+    pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
+        let pool = &self.internal;
+        // If the pool is empty, we double the capacity and batch allocate
+        // empty elements.
+        dbg!(pool.capacity);
+        if pool.free.is_empty() {
+            for _ in 0..dbg!(pool.capacity) {
+                let item = (*pool.create)();
+                pool.free.push(item);
+            }
+            // pool.capacity *= 2;
+        }
+
+        ItemGuard {
+            item: Some(pool.free.pop().unwrap()),
+            pool: self,
+        }
+    }
+
+    pub fn reintroduce(&self, mut item: T) {
+        let pool = &self.internal;
+        (*pool.clear)(&mut item);
+        pool.free.push(item);
+    }
+}
+
+impl<T> Clone for Pool<T> {
+    fn clone(&self) -> Self {
+        Pool {
+            internal: self.internal.clone(),
         }
     }
 }

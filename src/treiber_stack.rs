@@ -2,6 +2,8 @@
 //!
 //! https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-epoch/examples/treiber_stack.rs
 
+#![allow(unused)]
+
 use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
