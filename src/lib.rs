@@ -1,5 +1,3 @@
-#![feature(test)]
-
 use std::sync::Arc;
 use treiber_stack::TreiberStack as Stack;
 
@@ -12,7 +10,7 @@ struct Internal<T> {
 }
 
 impl<T> Internal<T> {
-    pub fn new<C, D>(create: C, clear: D) -> Self
+    fn new<C, D>(create: C, clear: D) -> Self
     where
         C: Fn() -> T + Send + Sync + 'static,
         D: Fn(&mut T) -> () + Send + Sync + 'static,
@@ -25,13 +23,24 @@ impl<T> Internal<T> {
     }
 }
 
-/// A pool of reusable mememory.
+/// A pool of reusable memory.
 pub struct Pool<T> {
     internal: Arc<Internal<T>>,
 }
 
 impl<T> Pool<T> {
-    pub fn new<C, D>(create: C, clear: D) -> Pool<T>
+    /// Create a new Pool from an initializer function.
+    pub fn new<C>(create: C) -> Pool<T>
+    where
+        C: Fn() -> T + Send + Sync + 'static,
+    {
+        Pool {
+            internal: Arc::new(Internal::new(create, |_| {})),
+        }
+    }
+
+    /// Create a new Pool from an initializer function and a clear function.
+    pub fn with_clear<C, D>(create: C, clear: D) -> Pool<T>
     where
         C: Fn() -> T + Send + Sync + 'static,
         D: Fn(&mut T) -> () + Send + Sync + 'static,
@@ -41,6 +50,7 @@ impl<T> Pool<T> {
         }
     }
 
+    /// Get an item from the pool.
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
         let pool = &self.internal;
         let item = pool.stack.pop();
@@ -50,7 +60,8 @@ impl<T> Pool<T> {
         }
     }
 
-    pub fn reintroduce(&self, mut item: T) {
+    /// Store an item back inside the pool.
+    fn reintroduce(&self, mut item: T) {
         (*self.internal.clear)(&mut item);
         self.internal.stack.push(item);
     }
@@ -64,6 +75,7 @@ impl<T> Clone for Pool<T> {
     }
 }
 
+/// RAII structure used to reintroduce an item into the pool when dropped.
 pub struct ItemGuard<'a, T> {
     item: Option<T>,
     pool: &'a Pool<T>,

@@ -12,7 +12,7 @@ mod remem {
 
     #[bench]
     fn create(b: &mut Bencher) {
-        b.iter(|| Pool::<Vec<usize>>::new(|| vec![0; CAPACITY], |v| v.clear()));
+        b.iter(|| Pool::<Vec<usize>>::new(|| vec![0; CAPACITY]));
     }
 
     #[bench]
@@ -26,7 +26,7 @@ mod remem {
     }
 
     fn run(thread: usize, iter: usize) {
-        let p = Pool::<Vec<usize>>::new(|| vec![0; CAPACITY], |_| ());
+        let p = Pool::<Vec<usize>>::new(|| vec![0; CAPACITY]);
         let mut threads = Vec::new();
 
         for _ in 0..thread {
