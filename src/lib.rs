@@ -2,18 +2,22 @@
 
 use std::sync::{Arc, Mutex};
 
+use treiber_stack::TreiberStack;
+
+mod treiber_stack;
+
 pub struct Pool<T> {
     internal: Arc<Mutex<InternalPool<T>>>,
 }
 
 impl<T> Pool<T> {
-    pub fn new<C, D>(cap: usize, creation: C, clearance: D) -> Pool<T>
+    pub fn new<C, D>(cap: usize, create: C, clear: D) -> Pool<T>
     where
         C: Fn() -> T + 'static,
         D: Fn(&mut T) -> () + 'static,
     {
         Pool {
-            internal: Arc::new(Mutex::new(InternalPool::new(cap, creation, clearance))),
+            internal: Arc::new(Mutex::new(InternalPool::new(cap, create, clear))),
         }
     }
 
@@ -25,7 +29,7 @@ impl<T> Pool<T> {
             let capacity = pool.free.capacity();
             pool.free.reserve(capacity);
             for _ in 0..capacity {
-                let item = (*pool.creation)();
+                let item = (*pool.create)();
                 pool.free.push(item);
             }
         }
@@ -38,7 +42,7 @@ impl<T> Pool<T> {
 
     pub fn reintroduce(&self, mut item: T) {
         let mut pool = self.internal.lock().unwrap();
-        (*pool.clearance)(&mut item);
+        (*pool.clear)(&mut item);
         pool.free.push(item);
     }
 }
@@ -53,24 +57,24 @@ impl<T> Clone for Pool<T> {
 
 struct InternalPool<T> {
     free: Vec<T>,
-    creation: Box<dyn Fn() -> T>,
-    clearance: Box<dyn Fn(&mut T)>,
+    create: Box<dyn Fn() -> T>,
+    clear: Box<dyn Fn(&mut T)>,
 }
 
 impl<T> InternalPool<T> {
-    pub fn new<C, D>(cap: usize, creation: C, clearance: D) -> Self
+    pub fn new<C, D>(cap: usize, create: C, clear: D) -> Self
     where
         C: Fn() -> T + 'static,
         D: Fn(&mut T) -> () + 'static,
     {
         let mut free = Vec::with_capacity(cap);
         for _ in 0..cap {
-            free.push(creation());
+            free.push(create());
         }
         InternalPool {
             free,
-            creation: Box::new(creation),
-            clearance: Box::new(clearance),
+            create: Box::new(create),
+            clear: Box::new(clear),
         }
     }
 }
