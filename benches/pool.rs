@@ -2,53 +2,79 @@
 
 extern crate test;
 
-use remem::Pool;
-use std::thread;
-use test::Bencher;
+mod remem {
+    use remem::Pool;
+    use std::thread;
+    use test::Bencher;
 
-#[bench]
-fn create(b: &mut Bencher) {
-    b.iter(|| Pool::<Vec<()>>::new(|| Vec::new(), |v| v.clear()));
-}
-
-#[bench]
-fn contention(b: &mut Bencher) {
-    b.iter(|| run(10, 1000));
-}
-
-#[bench]
-fn no_contention(b: &mut Bencher) {
-    b.iter(|| run(1, 10000));
-}
-
-fn run(thread: usize, iter: usize) {
-    let p = Pool::<Vec<usize>>::new(|| vec![], |v| v.clear());
-    let mut threads = Vec::new();
-
-    for _ in 0..thread {
-        let p = p.clone();
-        threads.push(thread::spawn(move || {
-            for _ in 0..iter {
-                let mut v = p.get();
-                v.push(1);
-            }
-        }));
+    #[bench]
+    fn create(b: &mut Bencher) {
+        b.iter(|| Pool::<Vec<()>>::new(|| Vec::new(), |v| v.clear()));
     }
 
-    for t in threads {
-        t.join();
+    #[bench]
+    fn contention(b: &mut Bencher) {
+        b.iter(|| run(10, 10000));
+    }
+
+    #[bench]
+    fn no_contention(b: &mut Bencher) {
+        b.iter(|| run(1, 10000));
+    }
+
+    fn run(thread: usize, iter: usize) {
+        let p = Pool::<Vec<usize>>::new(|| Vec::with_capacity(1), |v| v.clear());
+        let mut threads = Vec::new();
+
+        for _ in 0..thread {
+            let p = p.clone();
+            threads.push(thread::spawn(move || {
+                for _ in 0..iter {
+                    let mut v = p.get();
+                    v.push(1);
+                }
+            }));
+        }
+
+        for t in threads {
+            t.join().unwrap();
+        }
     }
 }
 
-// #[bench]
-// fn bench_remem(b: &mut Bencher) {
-//     let pool = Pool::<Vec<usize>>::new(1024, || Vec::new(), |v| v.clear());
-//     b.iter(|| {
-//         run_benchmark!(|| pool.get());
-//     });
-// }
+mod vec {
+    use std::thread;
+    use test::Bencher;
 
-// #[bench]
-// fn bench_vec(b: &mut Bencher) {
-//     b.iter(|| run_benchmark!(|| Vec::new()));
-// }
+    #[bench]
+    fn create(b: &mut Bencher) {
+        b.iter(|| Vec::<usize>::with_capacity(1));
+    }
+
+    #[bench]
+    fn contention(b: &mut Bencher) {
+        b.iter(|| run(10, 10000));
+    }
+
+    #[bench]
+    fn no_contention(b: &mut Bencher) {
+        b.iter(|| run(1, 10000));
+    }
+
+    fn run(thread: usize, iter: usize) {
+        let mut threads = Vec::new();
+
+        for _ in 0..thread {
+            threads.push(thread::spawn(move || {
+                for _ in 0..iter {
+                    let mut v: Vec<usize> = Vec::with_capacity(1);
+                    v.push(1);
+                }
+            }));
+        }
+
+        for t in threads {
+            t.join().unwrap();
+        }
+    }
+}
