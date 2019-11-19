@@ -6,7 +6,7 @@ use treiber_stack::TreiberStack as Stack;
 mod treiber_stack;
 
 struct Internal<T> {
-    free: Stack<T>,
+    stack: Stack<T>,
     create: Box<dyn Fn() -> T + Send + Sync>,
     clear: Box<dyn Fn(&mut T) + Send + Sync>,
 }
@@ -18,7 +18,7 @@ impl<T> Internal<T> {
         D: Fn(&mut T) -> () + Send + Sync + 'static,
     {
         Internal {
-            free: Stack::new(),
+            stack: Stack::new(),
             create: Box::new(create),
             clear: Box::new(clear),
         }
@@ -42,13 +42,7 @@ impl<T> Pool<T> {
     }
 
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
-        let pool = &self.internal;
-        let item = if dbg!(pool.free.is_empty()) {
-            (*pool.create)()
-        } else {
-            pool.free.pop().unwrap()
-        };
-
+        let item = self.internal.stack.pop().unwrap_or_else(|| (*self.internal.create)());
         ItemGuard {
             item: Some(item),
             pool: self,
@@ -56,9 +50,8 @@ impl<T> Pool<T> {
     }
 
     pub fn reintroduce(&self, mut item: T) {
-        let pool = &self.internal;
-        (*pool.clear)(&mut item);
-        pool.free.push(item);
+        (*self.internal.clear)(&mut item);
+        self.internal.stack.push(item);
     }
 }
 
