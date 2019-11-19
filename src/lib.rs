@@ -42,9 +42,10 @@ impl<T> Pool<T> {
     }
 
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
-        let item = self.internal.stack.pop().unwrap_or_else(|| (*self.internal.create)());
+        let pool = &self.internal;
+        let item = pool.stack.pop();
         ItemGuard {
-            item: Some(item),
+            item: Some(item.unwrap_or_else(|| (*self.internal.create)())),
             pool: self,
         }
     }
