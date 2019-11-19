@@ -7,25 +7,31 @@ pub struct Pool<T> {
 }
 
 impl<T> Pool<T> {
-    pub fn new<C, D>(creation: C, clearance: D) -> Pool<T>
+    pub fn new<C, D>(cap: usize, creation: C, clearance: D) -> Pool<T>
     where
         C: Fn() -> T + 'static,
         D: Fn(&mut T) -> () + 'static,
     {
         Pool {
-            internal: Arc::new(Mutex::new(InternalPool::new(creation, clearance))),
+            internal: Arc::new(Mutex::new(InternalPool::new(cap, creation, clearance))),
         }
     }
 
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
         let mut pool = self.internal.lock().unwrap();
-        let item = if pool.free.is_empty() {
-            (*pool.creation)()
-        } else {
-            pool.free.pop().unwrap()
-        };
+        // If the pool is empty, we double the capacity and batch allocate
+        // empty elements.
+        if pool.free.is_empty() {
+            let capacity = pool.free.capacity();
+            pool.free.reserve(capacity);
+            for _ in 0..capacity {
+                let item = (*pool.creation)();
+                pool.free.push(item);
+            }
+        }
+
         ItemGuard {
-            item: Some(item),
+            item: Some(pool.free.pop().unwrap()),
             pool: self,
         }
     }
@@ -52,13 +58,17 @@ struct InternalPool<T> {
 }
 
 impl<T> InternalPool<T> {
-    pub fn new<C, D>(creation: C, clearance: D) -> Self
+    pub fn new<C, D>(cap: usize, creation: C, clearance: D) -> Self
     where
         C: Fn() -> T + 'static,
         D: Fn(&mut T) -> () + 'static,
     {
+        let mut free = Vec::with_capacity(cap);
+        for _ in 0..cap {
+            free.push(creation());
+        }
         InternalPool {
-            free: Vec::new(),
+            free,
             creation: Box::new(creation),
             clearance: Box::new(clearance),
         }
@@ -100,6 +110,7 @@ mod tests {
     #[test]
     fn it_works() {
         let pool = Pool::<Vec<u8>>::new(
+            1024,
             || {
                 println!("Allocating new memory");
                 Vec::new()
@@ -123,23 +134,25 @@ mod tests {
     }
 
     const ORIGINAL_SIZE: usize = 10;
-    const ITERATIONS: usize = 1000;
+    const ITERATIONS: usize = 10;
 
     macro_rules! run_benchmark {
-        ($get_item:expr) => {{
-            let mut item = $get_item;
+        ($create_item:expr) => {{
+            for _ in 0..1000 {
+                let mut item = $create_item();
 
-            for n in 0..ORIGINAL_SIZE {
-                item.push(n);
-            }
-
-            drop(item);
-
-            for n in 0..ITERATIONS {
-                let mut item = $get_item;
-
-                for n in 0..(ITERATIONS - n) {
+                for n in 0..ORIGINAL_SIZE {
                     item.push(n);
+                }
+
+                drop(item);
+
+                for n in 0..ITERATIONS {
+                    let mut item = $create_item();
+
+                    for n in 0..(ITERATIONS - n) {
+                        item.push(n);
+                    }
                 }
             }
         }};
@@ -147,14 +160,14 @@ mod tests {
 
     #[bench]
     fn bench_remem(b: &mut Bencher) {
+        let pool = Pool::<Vec<usize>>::new(1024, || Vec::new(), |v| v.clear());
         b.iter(|| {
-            let pool = Pool::<Vec<usize>>::new(|| Vec::new(), |v| v.clear());
-            run_benchmark!(pool.get());
+            run_benchmark!(|| pool.get());
         });
     }
 
     #[bench]
     fn bench_vec(b: &mut Bencher) {
-        b.iter(|| run_benchmark!(Vec::new()));
+        b.iter(|| run_benchmark!(|| Vec::new()));
     }
 }
