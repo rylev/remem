@@ -2,28 +2,31 @@
 
 extern crate test;
 
+const CAPACITY: usize = 4_000; // 4kb
+
 mod remem {
+    use super::CAPACITY;
     use remem::Pool;
     use std::thread;
     use test::Bencher;
 
     #[bench]
     fn create(b: &mut Bencher) {
-        b.iter(|| Pool::<Vec<()>>::new(|| Vec::new(), |v| v.clear()));
+        b.iter(|| Pool::<Vec<usize>>::new(|| vec![0; CAPACITY], |v| v.clear()));
     }
 
     #[bench]
     fn contention(b: &mut Bencher) {
-        b.iter(|| run(10, 10000));
+        b.iter(|| run(10, 1000));
     }
 
     #[bench]
     fn no_contention(b: &mut Bencher) {
-        b.iter(|| run(1, 10000));
+        b.iter(|| run(1, 1000));
     }
 
     fn run(thread: usize, iter: usize) {
-        let p = Pool::<Vec<usize>>::new(|| Vec::with_capacity(1), |v| v.clear());
+        let p = Pool::<Vec<usize>>::new(|| vec![0; CAPACITY], |_| ());
         let mut threads = Vec::new();
 
         for _ in 0..thread {
@@ -31,7 +34,9 @@ mod remem {
             threads.push(thread::spawn(move || {
                 for _ in 0..iter {
                     let mut v = p.get();
-                    v.push(1);
+                    v[0] = 1;
+                    v[CAPACITY / 4] = 1;
+                    v[CAPACITY / 2] = 1;
                 }
             }));
         }
@@ -43,22 +48,23 @@ mod remem {
 }
 
 mod vec {
+    use super::CAPACITY;
     use std::thread;
     use test::Bencher;
 
     #[bench]
     fn create(b: &mut Bencher) {
-        b.iter(|| Vec::<usize>::with_capacity(1));
+        b.iter(|| vec![0; CAPACITY]);
     }
 
     #[bench]
     fn contention(b: &mut Bencher) {
-        b.iter(|| run(10, 10000));
+        b.iter(|| run(10, 1000));
     }
 
     #[bench]
     fn no_contention(b: &mut Bencher) {
-        b.iter(|| run(1, 10000));
+        b.iter(|| run(1, 1000));
     }
 
     fn run(thread: usize, iter: usize) {
@@ -67,8 +73,10 @@ mod vec {
         for _ in 0..thread {
             threads.push(thread::spawn(move || {
                 for _ in 0..iter {
-                    let mut v: Vec<usize> = Vec::with_capacity(1);
-                    v.push(1);
+                    let mut v: Vec<usize> = vec![0; CAPACITY];
+                    v[0] = 1;
+                    v[CAPACITY / 4] = 1;
+                    v[CAPACITY / 2] = 1;
                 }
             }));
         }
