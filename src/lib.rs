@@ -22,8 +22,9 @@ impl<T> Pool<T> {
         // If the pool is empty, we double the capacity and batch allocate
         // empty elements.
         if pool.free.is_empty() {
-            pool.capacity *= 2;
-            for _ in 0..(pool.capacity / 2) {
+            let capacity = pool.free.capacity();
+            pool.free.reserve(capacity);
+            for _ in 0..capacity {
                 let item = (*pool.creation)();
                 pool.free.push(item);
             }
@@ -51,7 +52,6 @@ impl<T> Clone for Pool<T> {
 }
 
 struct InternalPool<T> {
-    capacity: usize,
     free: Vec<T>,
     creation: Box<dyn Fn() -> T>,
     clearance: Box<dyn Fn(&mut T)>,
@@ -68,7 +68,6 @@ impl<T> InternalPool<T> {
             free.push(creation());
         }
         InternalPool {
-            capacity: cap,
             free,
             creation: Box::new(creation),
             clearance: Box::new(clearance),
