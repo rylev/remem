@@ -2,17 +2,19 @@
 
 extern crate test;
 
-const CAPACITY: usize = 4_000; // 4kb
+const CAPACITY: usize = 4 * 1024; // 4kib
 
 mod remem {
     use super::CAPACITY;
     use remem::Pool;
     use std::thread;
-    use test::Bencher;
+    use test::{black_box, Bencher};
 
     #[bench]
     fn create(b: &mut Bencher) {
-        b.iter(|| Pool::<Vec<usize>>::new(|| vec![0; CAPACITY]));
+        let pool = Pool::<Vec<u8>>::new(|| vec![0; CAPACITY]);
+
+        b.iter(|| black_box(pool.get()));
     }
 
     #[bench]
@@ -26,7 +28,7 @@ mod remem {
     }
 
     fn run(thread: usize, iter: usize) {
-        let p = Pool::new(|| vec![0usize; CAPACITY]);
+        let p = Pool::new(|| vec![0u8; CAPACITY]);
         let mut threads = Vec::new();
 
         for _ in 0..thread {
@@ -73,7 +75,7 @@ mod vec {
         for _ in 0..thread {
             threads.push(thread::spawn(move || {
                 for _ in 0..iter {
-                    let mut v = vec![0usize; CAPACITY];
+                    let mut v = vec![0u8; CAPACITY];
                     v[0] = 1;
                     v[CAPACITY / 4] = 1;
                     v[CAPACITY / 2] = 1;
