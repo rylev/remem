@@ -50,6 +50,17 @@ This crate uses two instances of `unsafe` to implement a lock-free Treiber
 stack. This implementation was copied from the reference implementation in
 `crossbeam`.
 
+## Contributing
+Want to join us? Check out our ["Contributing" guide][contributing] and take a
+look at some of these issues:
+
+- [Issues labeled "good first issue"][good-first-issue]
+- [Issues labeled "help wanted"][help-wanted]
+
+[contributing]: https://github.com/rylev/remem/blob/master.github/CONTRIBUTING.md
+[good-first-issue]: https://github.com/rylev/remem/labels/good%20first%20issue
+[help-wanted]: https://github.com/rylev/remem/labels/help%20wanted
+
 ## License
 
 <sup>
