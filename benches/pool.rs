@@ -33,7 +33,10 @@ mod remem {
             let p = p.clone();
             threads.push(thread::spawn(move || {
                 for _ in 0..iter {
-                    black_box(p.get());
+                    let mut v = black_box(p.get());
+                    v[0] = 1;
+                    v[CAPACITY / 4] = 1;
+                    v[CAPACITY / 2] = 1;
                 }
             }));
         }
@@ -74,7 +77,10 @@ mod byte_pool {
             let p = p.clone();
             threads.push(thread::spawn(move || {
                 for _ in 0..iter {
-                    black_box(p.alloc(CAPACITY));
+                    let mut v = black_box(p.alloc(CAPACITY));
+                    v[0] = 1;
+                    v[CAPACITY / 4] = 1;
+                    v[CAPACITY / 2] = 1;
                 }
             }));
         }
@@ -111,7 +117,10 @@ mod vec {
         for _ in 0..thread {
             threads.push(thread::spawn(move || {
                 for _ in 0..iter {
-                    black_box(vec![0u8; CAPACITY]);
+                    let mut v = black_box(vec![0u8; CAPACITY]);
+                    v[0] = 1;
+                    v[CAPACITY / 4] = 1;
+                    v[CAPACITY / 2] = 1;
                 }
             }));
         }
