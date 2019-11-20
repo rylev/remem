@@ -2,6 +2,17 @@
 name = "remem"
 version = "0.1.0"
 authors = ["Ryan Levick <ryan.levick@gmail.com>"]
+repository = "https://github.com/rylev/remem"
+documentation = "https://docs.rs/remem"
+description = "Thread-safe object reuse."
+keywords = ["mempool", "bytes", "async", "native", "generic"]
+categories = ["data-structure", "memory-management", "asynchronous"]
+license = "MIT OR Apache-2.0"
+edition = "2018"
+
+[package]
+authors = ["Yoshua Wuyts <yoshuawuyts@gmail.com>"]
+readme = "README.md"
 edition = "2018"
 
 [dependencies]
