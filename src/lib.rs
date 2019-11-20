@@ -17,28 +17,28 @@
 //! # Example
 //!
 //! ```rust
-//! # const CAPACITY: usize = 0;
-//! # let mut threads = vec![];
 //! use remem::Pool;
 //! use std::thread;
 //!
-//! let p = Pool::new(|| vec![0usize; CAPACITY]);
+//! let p = Pool::new(|| vec![0usize; 1024]);
 //!
 //! // Create a new handle onto the pool and send it to a new thread.
 //! let p2 = p.clone();
-//! threads.push(thread::spawn(move || {
+//! let t = thread::spawn(move || {
 //!     // Get a new vec from the pool and push two values into it.
 //!     let mut v = p2.get();
 //!     v.push(1);
 //!     v.push(2);
-//! }));
-//!
+//! });
 //!
 //! // Meanwhile we can still access the original handle from the main
 //! // thread and use it to get new vecs from.
 //! let mut v = p.get();
 //! v.push(1);
 //! v.push(2);
+//!
+//! // Wait for the other thread to complete
+//! t.join().unwrap();
 //!
 //! // When the vec is dropped, it's returned to the pool and is ready to be
 //! // used again from a next call to `p.get()`.
