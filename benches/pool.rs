@@ -2,7 +2,7 @@
 
 extern crate test;
 
-const CAPACITY: usize = 4_000; // 4kb
+const CAPACITY: usize = 4 * 1024; // 4kb
 
 mod remem {
     use super::CAPACITY;
@@ -12,7 +12,7 @@ mod remem {
 
     #[bench]
     fn create(b: &mut Bencher) {
-        b.iter(|| Pool::<Vec<usize>>::new(|| vec![0; CAPACITY]));
+        b.iter(|| Pool::<Vec<u8>>::new(|| vec![0; CAPACITY]));
     }
 
     #[bench]
@@ -26,7 +26,7 @@ mod remem {
     }
 
     fn run(thread: usize, iter: usize) {
-        let p = Pool::new(|| vec![0usize; CAPACITY]);
+        let p = Pool::new(|| vec![0u8; CAPACITY]);
         let mut threads = Vec::new();
 
         for _ in 0..thread {
@@ -47,13 +47,14 @@ mod remem {
 mod byte_pool {
     use super::CAPACITY;
     use byte_pool::BytePool;
+    use std::sync::Arc;
     use std::thread;
     use test::{black_box, Bencher};
 
-    // #[bench]
-    // fn create(b: &mut Bencher) {
-    //     b.iter(|| Pool::<Vec<usize>>::new(|| vec![0; CAPACITY]));
-    // }
+    #[bench]
+    fn create(b: &mut Bencher) {
+        b.iter(|| Arc::new(BytePool::new()));
+    }
 
     #[bench]
     fn contention(b: &mut Bencher) {
@@ -66,7 +67,7 @@ mod byte_pool {
     }
 
     fn run(thread: usize, iter: usize) {
-        let p = std::sync::Arc::new(BytePool::new());
+        let p = Arc::new(BytePool::new());
         let mut threads = Vec::new();
 
         for _ in 0..thread {
@@ -110,7 +111,7 @@ mod vec {
         for _ in 0..thread {
             threads.push(thread::spawn(move || {
                 for _ in 0..iter {
-                    black_box(vec![0usize; CAPACITY]);
+                    black_box(vec![0u8; CAPACITY]);
                 }
             }));
         }

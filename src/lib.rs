@@ -46,7 +46,14 @@
 //! // used again from a next call to `p.get()`.
 //! drop(v);
 //! ```
+
+#![forbid(rust_2018_idioms)]
+#![deny(missing_debug_implementations, nonstandard_style)]
+#![warn(missing_docs, missing_doc_code_examples, unreachable_pub)]
+#![cfg_attr(test, deny(warnings))]
+
 use crossbeam_queue::SegQueue;
+use std::fmt::{self, Debug};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -73,6 +80,16 @@ impl<T> Internal<T> {
 /// A pool of reusable memory.
 pub struct Pool<T> {
     internal: Arc<Internal<T>>,
+}
+
+impl<T> Debug for Pool<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Pool")
+            .field("queue", &format!("[T; {}]", self.internal.queue.len()))
+            .field("create", &"Box<dyn Fn() -> T + Send + Sync>")
+            .field("clear", &"Box<dyn Fn(&mut T) + Send + Sync>")
+            .finish()
+    }
 }
 
 impl<T> Pool<T> {
@@ -134,6 +151,14 @@ impl<T> Clone for Pool<T> {
 pub struct ItemGuard<'a, T> {
     item: Option<T>,
     pool: &'a Pool<T>,
+}
+
+impl<T: Debug> Debug for ItemGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ItemGuard")
+            .field("item", &self.item)
+            .finish()
+    }
 }
 
 impl<'a, T> Drop for ItemGuard<'a, T> {
