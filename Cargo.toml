@@ -12,6 +12,7 @@ keywords = ["mempool", "bytes", "async", "native", "generic"]
 categories = ["data-structure", "memory-management", "asynchronous"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
+readme = "./README.md"
 
 [dependencies]
 crossbeam-epoch = "0.8.0"
