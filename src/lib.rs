@@ -17,6 +17,8 @@
 //! # Example
 //!
 //! ```rust
+//! # const CAPACITY: usize = 0;
+//! # let mut threads = vec![];
 //! use remem::Pool;
 //! use std::thread;
 //!
