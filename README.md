@@ -46,9 +46,8 @@ $ cargo add remem
 ```
 
 ## Safety
-This crate uses two instances of `unsafe` to implement a lock-free Treiber
-stack. This implementation was copied from the reference implementation in
-`crossbeam`.
+This crate uses ``#![deny(unsafe_code)]`` to ensure everything is implemented in
+100% Safe Rust.
 
 ## Contributing
 Want to join us? Check out our ["Contributing" guide][contributing] and take a

@@ -11,8 +11,8 @@
 //!
 //! This is useful when writing networked services, performing file reads, or
 //! anything else that might allocate a lot. Internally it's implemented using a
-//! "Treiber stack" which is a really fast algorithm that makes `remem` safe to
-//! use between threads!
+//! crossbeam's `SegQueue` which is a really fast algorithm that makes `remem`
+//! safe to use between threads!
 //!
 //! # Example
 //!
@@ -20,6 +20,8 @@
 //! use remem::Pool;
 //! use std::thread;
 //!
+//! // Create a new Pool instance where new items are initialized as
+//! // 1kb zero-filled byte vecs.
 //! let p = Pool::new(|| vec![0usize; 1024]);
 //!
 //! // Create a new handle onto the pool and send it to a new thread.
@@ -44,14 +46,19 @@
 //! // used again from a next call to `p.get()`.
 //! drop(v);
 //! ```
+
+#![forbid(rust_2018_idioms)]
+#![deny(missing_debug_implementations, nonstandard_style)]
+#![warn(missing_docs, missing_doc_code_examples, unreachable_pub)]
+#![cfg_attr(test, deny(warnings))]
+
+use crossbeam_queue::SegQueue;
+use std::fmt::{self, Debug};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use treiber_stack::TreiberStack as Stack;
-
-mod treiber_stack;
 
 struct Internal<T> {
-    stack: Stack<T>,
+    queue: SegQueue<T>,
     create: Box<dyn Fn() -> T + Send + Sync>,
     clear: Box<dyn Fn(&mut T) + Send + Sync>,
 }
@@ -63,7 +70,7 @@ impl<T> Internal<T> {
         D: Fn(&mut T) -> () + Send + Sync + 'static,
     {
         Internal {
-            stack: Stack::new(),
+            queue: SegQueue::new(),
             create: Box::new(create),
             clear: Box::new(clear),
         }
@@ -73,6 +80,16 @@ impl<T> Internal<T> {
 /// A pool of reusable memory.
 pub struct Pool<T> {
     internal: Arc<Internal<T>>,
+}
+
+impl<T> Debug for Pool<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Pool")
+            .field("queue", &format!("[T; {}]", self.internal.queue.len()))
+            .field("create", &"Box<dyn Fn() -> T + Send + Sync>")
+            .field("clear", &"Box<dyn Fn(&mut T) + Send + Sync>")
+            .finish()
+    }
 }
 
 impl<T> Pool<T> {
@@ -108,9 +125,9 @@ impl<T> Pool<T> {
     /// Get an item from the pool.
     pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
         let pool = &self.internal;
-        let item = pool.stack.pop();
+        let item = pool.queue.pop();
         ItemGuard {
-            item: Some(item.unwrap_or_else(|| (*self.internal.create)())),
+            item: Some(item.unwrap_or_else(|_| (*self.internal.create)())),
             pool: self,
         }
     }
@@ -118,7 +135,7 @@ impl<T> Pool<T> {
     /// Store an item back inside the pool.
     fn push(&self, mut item: T) {
         (*self.internal.clear)(&mut item);
-        self.internal.stack.push(item);
+        self.internal.queue.push(item);
     }
 }
 
@@ -134,6 +151,14 @@ impl<T> Clone for Pool<T> {
 pub struct ItemGuard<'a, T> {
     item: Option<T>,
     pool: &'a Pool<T>,
+}
+
+impl<T: Debug> Debug for ItemGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ItemGuard")
+            .field("item", &self.item)
+            .finish()
+    }
 }
 
 impl<'a, T> Drop for ItemGuard<'a, T> {
