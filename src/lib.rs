@@ -123,12 +123,12 @@ impl<T> Pool<T> {
     }
 
     /// Get an item from the pool.
-    pub fn get<'a>(&'a self) -> ItemGuard<'a, T> {
+    pub fn get(&self) -> ItemGuard<T> {
         let pool = &self.internal;
         let item = pool.queue.pop();
         ItemGuard {
             item: Some(item.unwrap_or_else(|_| (*self.internal.create)())),
-            pool: self,
+            pool: self.clone(),
         }
     }
 
@@ -148,12 +148,12 @@ impl<T> Clone for Pool<T> {
 }
 
 /// RAII structure used to reintroduce an item into the pool when dropped.
-pub struct ItemGuard<'a, T> {
+pub struct ItemGuard<T> {
     item: Option<T>,
-    pool: &'a Pool<T>,
+    pool: Pool<T>,
 }
 
-impl<T: Debug> Debug for ItemGuard<'_, T> {
+impl<T: Debug> Debug for ItemGuard<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ItemGuard")
             .field("item", &self.item)
@@ -161,13 +161,13 @@ impl<T: Debug> Debug for ItemGuard<'_, T> {
     }
 }
 
-impl<'a, T> Drop for ItemGuard<'a, T> {
+impl<T> Drop for ItemGuard<T> {
     fn drop(&mut self) {
         self.pool.push(self.item.take().unwrap())
     }
 }
 
-impl<'a, T> Deref for ItemGuard<'a, T> {
+impl<T> Deref for ItemGuard<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -175,7 +175,7 @@ impl<'a, T> Deref for ItemGuard<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for ItemGuard<'a, T> {
+impl<T> DerefMut for ItemGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.item.as_mut().unwrap()
     }
