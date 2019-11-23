@@ -25,6 +25,17 @@ mod remem {
         b.iter(|| run(1, 1000));
     }
 
+    #[bench]
+    fn get(b: &mut Bencher) {
+        b.iter(|| {
+            let p = Pool::new(|| vec![0u8; CAPACITY]);
+
+            for _ in 0..1000 {
+                black_box(p.get());
+            }
+        });
+    }
+
     fn run(thread: usize, iter: usize) {
         let p = Pool::new(|| vec![0u8; CAPACITY]);
         let mut threads = Vec::new();
